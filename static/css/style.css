@@ -1,0 +1,355 @@
+/* ==========================================================================
+   Autonomous Kinetic HUD - Tactical Teleoperation Design System
+   100% Self-Contained Offline Stylesheet for BeagleBone AI-64
+   ========================================================================== */
+
+:root {
+  --hud-bg: #0b0e13;
+  --hud-card: rgba(16, 19, 25, 0.85);
+  --hud-border: rgba(255, 255, 255, 0.12);
+  --hud-accent: #00ff9d;
+  --hud-accent-glow: rgba(0, 255, 157, 0.35);
+  --hud-cyan: #00e3fd;
+  --hud-cyan-glow: rgba(0, 227, 253, 0.35);
+  --hud-danger: #ef4444;
+  --hud-danger-glow: rgba(239, 68, 68, 0.45);
+  --font-mono: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+  --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #000;
+  color: #f1f5f9;
+  font-family: var(--font-mono);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* --------------------------------------------------------------------------
+   HUD Scanlines & Overlay Shaders
+   -------------------------------------------------------------------------- */
+.scanlines {
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0) 50%,
+    rgba(0, 0, 0, 0.35) 50%,
+    rgba(0, 0, 0, 0.35)
+  );
+  background-size: 100% 4px;
+}
+
+/* --------------------------------------------------------------------------
+   Native Webcam Viewport & Resolution Display Modes
+   -------------------------------------------------------------------------- */
+.camera-feed-native {
+  display: block;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.camera-feed-fit {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+  object-position: center !important;
+}
+
+.camera-feed-native-1x {
+  width: auto !important;
+  height: auto !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  object-fit: none !important;
+  object-position: center !important;
+  box-shadow: 0 0 35px rgba(0, 255, 157, 0.15), 0 0 1px rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+/* Resolution Selector Buttons */
+.res-btn {
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.18s ease-in-out;
+}
+
+.res-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.res-btn.active {
+  background-color: #00ff9d !important;
+  color: #0b0e13 !important;
+  box-shadow: 0 0 14px rgba(0, 255, 157, 0.45) !important;
+  font-weight: 700 !important;
+}
+
+/* Ping ring pulse animation */
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.3); opacity: 0.2; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.ping-ring {
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* --------------------------------------------------------------------------
+   Virtual Analog Joystick & Radar Dial
+   -------------------------------------------------------------------------- */
+.radar-dial {
+  background: radial-gradient(circle, rgba(16, 22, 30, 0.75) 0%, rgba(11, 14, 19, 0.92) 70%, rgba(16, 22, 30, 0.98) 100%);
+}
+
+.joystick-knob {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7), 0 0 15px rgba(0, 255, 157, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.35);
+  touch-action: none;
+  user-select: none;
+  will-change: transform;
+  transition: transform 0.05s ease-out;
+}
+
+.joystick-knob:active, .joystick-knob.dragging {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.85), 0 0 25px rgba(0, 255, 157, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.5);
+  transition: none;
+}
+
+/* --------------------------------------------------------------------------
+   Emergency Stop (E-STOP) Button
+   -------------------------------------------------------------------------- */
+.estop-glow {
+  box-shadow: 0 0 25px rgba(239, 68, 68, 0.45), inset 0 0 15px rgba(255, 255, 255, 0.25);
+  transition: transform 0.12s ease, box-shadow 0.15s ease;
+}
+
+.estop-glow:active, .estop-glow.halted {
+  box-shadow: 0 0 40px rgba(239, 68, 68, 0.85), inset 0 0 22px rgba(0, 0, 0, 0.5);
+  transform: scale(0.95);
+}
+
+/* --------------------------------------------------------------------------
+   Self-Contained Fallback Utilities (Mirroring Tailwind for offline stability)
+   -------------------------------------------------------------------------- */
+.aspect-video {
+  aspect-ratio: 16 / 9;
+}
+
+.backdrop-blur-md {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.backdrop-blur-xl {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+/* Speed Button States */
+.speed-btn {
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+.speed-btn.active {
+  background-color: var(--hud-accent) !important;
+  color: #000 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 0 14px var(--hud-accent-glow) !important;
+}
+
+/* Headlight Active Glow */
+.headlight-active {
+  background-color: rgba(250, 204, 21, 0.25) !important;
+  border-color: #facc15 !important;
+  color: #fef08a !important;
+  box-shadow: 0 0 16px rgba(250, 204, 21, 0.4) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive Teleoperation Layout Engine (Desktop Side Wings + Mobile Deck)
+   -------------------------------------------------------------------------- */
+.teleop-app-grid {
+  display: grid;
+  grid-template-areas: "left-panel video right-panel";
+  grid-template-columns: 280px 1fr 280px;
+  grid-template-rows: 1fr;
+  width: 100vw;
+  height: calc(100vh - 48px);
+  overflow: hidden;
+  background-color: #05070a;
+}
+
+.grid-area-left {
+  grid-area: left-panel;
+}
+
+.grid-area-video {
+  grid-area: video;
+}
+
+.grid-area-right {
+  grid-area: right-panel;
+}
+
+.grid-area-status {
+  display: none;
+}
+
+/* Resolution Dropdown Menu Styling */
+#resolution-select {
+  background-color: #10141c;
+  color: #00ff9d;
+  border: 1px solid rgba(0, 255, 157, 0.35);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+#resolution-select:focus, #resolution-select:hover {
+  border-color: #00ff9d;
+  box-shadow: 0 0 10px rgba(0, 255, 157, 0.3);
+}
+
+#resolution-select option {
+  background-color: #0c1017;
+  color: #f1f5f9;
+}
+
+/* Sleek custom scrollbars for side panels */
+#panel-left::-webkit-scrollbar,
+#panel-right::-webkit-scrollbar {
+  width: 4px;
+}
+
+#panel-left::-webkit-scrollbar-track,
+#panel-right::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#panel-left::-webkit-scrollbar-thumb,
+#panel-right::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+}
+
+#panel-left::-webkit-scrollbar-thumb:hover,
+#panel-right::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 157, 0.4);
+}
+
+/* Mobile & Tablet Responsiveness */
+@media (max-width: 1023px) {
+  .teleop-app-grid {
+    grid-template-areas:
+      "video video"
+      "status status"
+      "left-panel right-panel";
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto 1fr;
+    height: calc(100dvh - 44px);
+    height: calc(100vh - 44px);
+  }
+
+  .grid-area-status {
+    display: flex;
+    grid-area: status;
+  }
+
+  .grid-area-video {
+    width: 100%;
+    max-height: 40vh;
+    min-height: 200px;
+  }
+
+  .radar-dial {
+    width: 8.5rem !important;
+    height: 8.5rem !important;
+  }
+
+  .joystick-knob {
+    width: 2.8rem !important;
+    height: 2.8rem !important;
+  }
+
+  .estop-glow {
+    width: 5.5rem !important;
+    height: 5.5rem !important;
+  }
+}
+
+/* Mobile Landscape (Low height screens) */
+@media (max-height: 500px) and (orientation: landscape) {
+  .teleop-app-grid {
+    grid-template-areas: "left-panel video right-panel";
+    grid-template-columns: 180px 1fr 180px;
+    grid-template-rows: 1fr;
+    height: calc(100dvh - 36px);
+    height: calc(100vh - 36px);
+  }
+
+  .grid-area-status {
+    display: none;
+  }
+
+  .grid-area-video {
+    max-height: 100%;
+  }
+
+  .radar-dial {
+    width: 7.5rem !important;
+    height: 7.5rem !important;
+  }
+
+  .joystick-knob {
+    width: 2.4rem !important;
+    height: 2.4rem !important;
+  }
+
+  .estop-glow {
+    width: 4.8rem !important;
+    height: 4.8rem !important;
+  }
+}
+
+/* TCS Active Pulse & Glow */
+.tcs-slip-active {
+  background-color: rgba(245, 158, 11, 0.25) !important;
+  border-color: #f59e0b !important;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.5) !important;
+  animation: tcsPulse 0.4s infinite alternate;
+}
+
+.tcs-guard-active {
+  background-color: rgba(239, 68, 68, 0.25) !important;
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.5) !important;
+  animation: tcsPulse 0.3s infinite alternate;
+}
+
+@keyframes tcsPulse {
+  0% { opacity: 0.8; transform: scale(1); }
+  100% { opacity: 1; transform: scale(1.04); }
+}
+

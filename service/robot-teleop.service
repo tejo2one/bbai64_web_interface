@@ -1,0 +1,18 @@
+[Unit]
+Description=Autonomous Robot Teleoperation Server & Cyber Face Engine
+After=network.target sound.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=debian
+WorkingDirectory=/opt/robot_teleop
+ExecStartPre=/bin/bash -c "mkdir -p /dev/shm/web_teleop && cp -rf /opt/robot_teleop/* /dev/shm/web_teleop/ 2>/dev/null || true"
+ExecStart=/opt/robot_teleop/launch_robot.sh
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

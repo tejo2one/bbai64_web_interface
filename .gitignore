@@ -1,0 +1,20 @@
+# Build outputs
+web_teleop_server
+build/
+bin/
+*.o
+*.raw
+*.png
+*.jpg
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local dumps and temp files
+server.log
+firefox.log
+*.swp
+*~
+.DS_Store

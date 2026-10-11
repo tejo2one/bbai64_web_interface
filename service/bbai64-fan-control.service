@@ -1,0 +1,15 @@
+[Unit]
+Description=BeagleBone AI-64 Multi-Zone Thermal Active Fan Control Daemon
+After=multi-user.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /opt/bbai64_fan_control/bbai64_fan_control.py
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

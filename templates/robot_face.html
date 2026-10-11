@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+  <title>TurtleBot Onboard Cybernetic Face Display</title>
+  
+  <!-- Standalone Stylesheet -->
+  <link rel="stylesheet" href="/static/css/style.css?v={{ ts }}"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <style>
+    /* Scanline and CRT shader effect */
+    .crt-overlay {
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.28) 50%), linear-gradient(90deg, rgba(0, 255, 157, 0.02), rgba(0, 229, 255, 0.01), rgba(0, 255, 157, 0.02));
+      background-size: 100% 4px, 6px 100%;
+    }
+    
+    /* Eye, ear, whisker, and mouth fluid transitions */
+    .eye-pupil, .eye-outer, .cat-ear, .cat-whisker, .cat-mouth {
+      transition: all 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    /* Keyframes for breathing and float animations */
+    @keyframes pulseGlow {
+      0%, 100% { filter: drop-shadow(0 0 14px rgba(0, 255, 157, 0.45)); }
+      50% { filter: drop-shadow(0 0 28px rgba(0, 255, 157, 0.85)); }
+    }
+
+    @keyframes floatEars {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-4px); }
+    }
+
+    .animate-pulse-subtle {
+      animation: pulseGlow 2.5s ease-in-out infinite;
+    }
+
+    .animate-float-ears {
+      animation: floatEars 3.2s ease-in-out infinite;
+    }
+
+    /* Motion reaction states applied to #cat-avatar */
+    
+    /* 1. LOOK LEFT (Turning Left) */
+    .state-left .eye-pupil {
+      transform: translate(-34px, 0px) scale(0.95, 1.05);
+    }
+    .state-left .cat-ear-left {
+      transform: rotate(-12deg) translateY(-4px);
+    }
+    .state-left .cat-ear-right {
+      transform: rotate(-3deg) translateY(2px);
+    }
+    .state-left .whisker-left {
+      transform: scaleX(1.15) rotate(-3deg);
+    }
+
+    /* 2. LOOK RIGHT (Turning Right) */
+    .state-right .eye-pupil {
+      transform: translate(34px, 0px) scale(0.95, 1.05);
+    }
+    .state-right .cat-ear-right {
+      transform: rotate(12deg) translateY(-4px);
+    }
+    .state-right .cat-ear-left {
+      transform: rotate(3deg) translateY(2px);
+    }
+    .state-right .whisker-right {
+      transform: scaleX(1.15) rotate(3deg);
+    }
+
+    /* 3. FORWARD / SPRINT (Squint & Determined Focus) */
+    .state-forward .eye-outer {
+      transform: scaleY(0.32) scaleX(1.12);
+    }
+    .state-forward .eye-pupil {
+      transform: scaleY(1.9) scaleX(0.5);
+    }
+    .state-forward .cat-ear-left {
+      transform: translateY(-8px) rotate(-6deg);
+    }
+    .state-forward .cat-ear-right {
+      transform: translateY(-8px) rotate(6deg);
+    }
+    .state-forward .face-blush {
+      opacity: 0.95 !important;
+      transform: scale(1.15);
+    }
+
+    /* 4. BACKWARD / REVERSE (Wide Eyes, Looking Up Surprised, Ears Flattened) */
+    .state-backward .eye-outer {
+      transform: translateY(-16px) scale(1.12);
+    }
+    .state-backward .eye-pupil {
+      transform: translate(0px, -24px) scale(1.3);
+    }
+    .state-backward .cat-ear-left {
+      transform: rotate(-18deg) translateY(6px);
+    }
+    .state-backward .cat-ear-right {
+      transform: rotate(18deg) translateY(6px);
+    }
+    .state-backward .cat-mouth {
+      transform: scale(1.3) translateY(4px);
+    }
+
+    /* 5. TCS SLIP INTERVENTION / ALERT */
+    .state-alert .eye-outer {
+      stroke: #ffb400 !important;
+      filter: drop-shadow(0 0 16px rgba(255, 180, 0, 0.8));
+    }
+    .state-alert .eye-pupil ellipse:first-child {
+      fill: #ffb400 !important;
+    }
+    .state-alert .cat-ear polygon {
+      stroke: #ffb400 !important;
+    }
+
+    /* 6. BLINK */
+    .eye-blink .eye-outer {
+      transform: scaleY(0.06) !important;
+    }
+
+    /* Mini Video Player Corner Reticles */
+    .pip-reticle-tl { top: 0; left: 0; border-top: 2px solid #00ff9d; border-left: 2px solid #00ff9d; }
+    .pip-reticle-tr { top: 0; right: 0; border-top: 2px solid #00ff9d; border-right: 2px solid #00ff9d; }
+    .pip-reticle-bl { bottom: 0; left: 0; border-bottom: 2px solid #00ff9d; border-left: 2px solid #00ff9d; }
+    .pip-reticle-br { bottom: 0; right: 0; border-bottom: 2px solid #00ff9d; border-right: 2px solid #00ff9d; }
+  </style>
+</head>
+<body class="bg-[#07090e] text-slate-100 font-sans h-screen w-screen overflow-hidden select-none flex flex-col justify-between relative crt-overlay p-0 m-0">
+
+  <!-- Ambient Glow Gradients -->
+  <div class="absolute inset-0 pointer-events-none overflow-hidden">
+    <div class="absolute -top-32 left-1/2 -translate-x-1/2 w-[720px] h-[360px] bg-[#00ff9d]/12 blur-[140px] rounded-full"></div>
+    <div class="absolute -bottom-24 left-1/2 -translate-x-1/2 w-[600px] h-[260px] bg-[#00e5ff]/12 blur-[120px] rounded-full"></div>
+    <div class="absolute inset-0 opacity-[0.035]" style="background-image: linear-gradient(#00ff9d 1px, transparent 1px), linear-gradient(to right, #00ff9d 1px, transparent 1px); background-size: 40px 40px;"></div>
+  </div>
+
+  <!-- TOP STATUS BAR (Optimized for BBAI-64 1024x600 Display) -->
+  <header class="relative z-10 w-full px-6 py-2.5 flex items-center justify-between border-b border-white/[0.08] bg-[#0b0e14]/75 backdrop-blur-md">
+    <!-- Left: Robot Identity & Status -->
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-[#00ff9d]/15 border border-[#00ff9d]/40 flex items-center justify-center text-[#00ff9d] shadow-[0_0_15px_rgba(0,255,157,0.3)]">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <rect height="10" rx="3" width="18" x="3" y="11"></rect>
+          <circle cx="12" cy="5" r="2"></circle>
+          <path d="M12 7v4"></path>
+          <line x1="8" x2="8" y1="16" y2="16.01"></line>
+          <line x1="16" x2="16" y1="16" y2="16.01"></line>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="font-bold tracking-wider text-xs text-white uppercase">TurtleBot // BBAI-64</span>
+          <span class="text-[#00ff9d] font-mono text-[10px] px-1.5 py-0.2 rounded bg-[#00ff9d]/15 border border-[#00ff9d]/30 font-semibold">ONBOARD DISPLAY</span>
+        </div>
+        <div class="text-[10px] font-mono text-slate-400 flex items-center gap-1.5 mt-0.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-[#00ff9d] animate-ping" id="serial-dot"></span>
+          <span id="serial-text">SERIAL: CONNECTED (/dev/ttyUSB0)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Center: Active Motion Vector & Expression State Badge -->
+    <div class="flex items-center gap-3 bg-[#131822]/85 border border-white/10 px-4 py-1.5 rounded-full shadow-inner">
+      <span class="text-[10px] font-mono tracking-widest text-slate-400 font-semibold">TELEOP VECTOR:</span>
+      <div class="flex items-center gap-2 font-mono text-xs font-bold text-[#00ff9d] transition-all" id="vector-badge">
+        <span class="text-sm" id="vector-arrow">●</span>
+        <span id="vector-label">IDLE (AWAITING INPUT)</span>
+      </div>
+    </div>
+
+    <!-- Right: Network Ping, Battery & System Info -->
+    <div class="flex items-center gap-3">
+      <!-- IP and Ping Pill -->
+      <div class="flex items-center gap-2 px-3 py-1 rounded-lg bg-[#121824] border border-cyan-500/30 text-left font-mono text-[10px]">
+        <span class="text-cyan-400 font-bold" id="host-ip">bbai.local</span>
+        <span class="text-slate-600">|</span>
+        <span class="text-emerald-400 font-bold" id="ping-readout">-- ms</span>
+      </div>
+
+      <!-- Battery Status Pill -->
+      <div class="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#141b24] border border-emerald-500/30 text-emerald-400 font-mono text-xs font-bold">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <rect height="10" rx="2" width="16" x="2" y="7"></rect>
+          <line x1="20" x2="20" y1="11" y2="13"></line>
+          <line stroke="#00ff9d" stroke-width="2.5" x1="6" x2="6" y1="10" y2="14"></line>
+          <line stroke="#00ff9d" stroke-width="2.5" x1="9" x2="9" y1="10" y2="14"></line>
+          <line stroke="#00ff9d" stroke-width="2.5" x1="12" x2="12" y1="10" y2="14"></line>
+        </svg>
+        <span>84%</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN VIEWPORT: ANIMATED CYBERNETIC ROBOT FACE -->
+  <main class="relative z-10 flex-1 flex flex-col items-center justify-center px-4 overflow-hidden">
+    
+    <!-- Cyber Cat Head Container -->
+    <div class="relative w-full max-w-[620px] aspect-[16/9] flex flex-col items-center justify-center transition-transform duration-300" id="cat-avatar">
+      <!-- Interactive Cat SVG Face -->
+      <svg class="w-full h-full max-h-[350px] drop-shadow-[0_0_35px_rgba(0,255,157,0.22)] animate-pulse-subtle" fill="none" viewBox="0 0 600 360" xmlns="http://www.w3.org/2000/svg">
+        
+        <!-- CAT EARS (Robotic cybernetic ears with internal glow) -->
+        <g class="animate-float-ears">
+          <!-- Left Ear -->
+          <g class="cat-ear cat-ear-left origin-[170px_110px]">
+            <polygon fill="#0d141e" points="120,110 160,20 215,95" stroke="#00ff9d" stroke-linejoin="round" stroke-width="3"></polygon>
+            <polygon fill="#00ff9d" fill-opacity="0.18" points="135,100 165,42 200,90"></polygon>
+            <line stroke="#00e5ff" stroke-linecap="round" stroke-width="2.5" x1="145" x2="162" y1="75" y2="46"></line>
+          </g>
+          <!-- Right Ear -->
+          <g class="cat-ear cat-ear-right origin-[430px_110px]">
+            <polygon fill="#0d141e" points="480,110 440,20 385,95" stroke="#00ff9d" stroke-linejoin="round" stroke-width="3"></polygon>
+            <polygon fill="#00ff9d" fill-opacity="0.18" points="465,100 435,42 400,90"></polygon>
+            <line stroke="#00e5ff" stroke-linecap="round" stroke-width="2.5" x1="455" x2="438" y1="75" y2="46"></line>
+          </g>
+        </g>
+
+        <!-- SUBTLE ROBOT HEAD SILHOUETTE (Rounded visor panel) -->
+        <rect fill="#0c1017" fill-opacity="0.85" height="230" rx="60" stroke="#1f2937" stroke-width="2" width="420" x="90" y="70"></rect>
+        <rect fill="none" height="220" rx="55" stroke="#00ff9d" stroke-dasharray="8 8" stroke-opacity="0.12" stroke-width="1.5" width="410" x="95" y="75"></rect>
+
+        <!-- EYES GROUP (LEFT & RIGHT) -->
+        <!-- LEFT EYE -->
+        <g class="origin-[210px_175px]" id="eye-left-group">
+          <!-- Outer Eye Sclera / Glow -->
+          <g class="eye-outer origin-[210px_175px]">
+            <ellipse cx="210" cy="175" fill="#091a14" rx="52" ry="56" stroke="#00ff9d" stroke-width="4"></ellipse>
+            <circle cx="210" cy="175" r="42" stroke="#00ff9d" stroke-dasharray="5 4" stroke-opacity="0.25" stroke-width="1.5"></circle>
+          </g>
+          <!-- Iris & Pupil -->
+          <g class="eye-pupil origin-[210px_175px]">
+            <ellipse cx="210" cy="175" fill="#00ff9d" rx="30" ry="46"></ellipse>
+            <ellipse cx="210" cy="175" fill="#062114" rx="14" ry="40"></ellipse>
+            <circle cx="198" cy="158" fill="#ffffff" r="8"></circle>
+            <circle cx="218" cy="188" fill="#ffffff" fill-opacity="0.8" r="3.5"></circle>
+          </g>
+        </g>
+
+        <!-- RIGHT EYE -->
+        <g class="origin-[390px_175px]" id="eye-right-group">
+          <!-- Outer Eye Sclera / Glow -->
+          <g class="eye-outer origin-[390px_175px]">
+            <ellipse cx="390" cy="175" fill="#091a14" rx="52" ry="56" stroke="#00ff9d" stroke-width="4"></ellipse>
+            <circle cx="390" cy="175" r="42" stroke="#00ff9d" stroke-dasharray="5 4" stroke-opacity="0.25" stroke-width="1.5"></circle>
+          </g>
+          <!-- Iris & Pupil -->
+          <g class="eye-pupil origin-[390px_175px]">
+            <ellipse cx="390" cy="175" fill="#00ff9d" rx="30" ry="46"></ellipse>
+            <ellipse cx="390" cy="175" fill="#062114" rx="14" ry="40"></ellipse>
+            <circle cx="378" cy="158" fill="#ffffff" r="8"></circle>
+            <circle cx="398" cy="188" fill="#ffffff" fill-opacity="0.8" r="3.5"></circle>
+          </g>
+        </g>
+
+        <!-- CAT NOSE & MOUTH -->
+        <polygon fill="#00ff9d" points="300,212 291,202 309,202"></polygon>
+        <path class="cat-mouth origin-[300px_225px]" d="M 284 220 Q 292 230 300 220 Q 308 230 316 220" fill="none" stroke="#00ff9d" stroke-linecap="round" stroke-width="3.5"></path>
+
+        <!-- CHEEK BLUSH (Illuminates in Forward/Sprint mode) -->
+        <ellipse class="face-blush transition-all duration-300 opacity-20" cx="140" cy="215" fill="#00ff9d" rx="20" ry="10"></ellipse>
+        <ellipse class="face-blush transition-all duration-300 opacity-20" cx="460" cy="215" fill="#00ff9d" rx="20" ry="10"></ellipse>
+
+        <!-- WHISKERS -->
+        <g class="cat-whisker whisker-left origin-[130px_210px]" opacity="0.8" stroke="#00ff9d" stroke-linecap="round" stroke-width="2.5">
+          <line x1="80" x2="135" y1="195" y2="206"></line>
+          <line x1="72" x2="132" y1="215" y2="216"></line>
+          <line x1="82" x2="136" y1="235" y2="226"></line>
+        </g>
+        <g class="cat-whisker whisker-right origin-[470px_210px]" opacity="0.8" stroke="#00ff9d" stroke-linecap="round" stroke-width="2.5">
+          <line x1="520" x2="465" y1="195" y2="206"></line>
+          <line x1="528" x2="468" y1="215" y2="216"></line>
+          <line x1="518" x2="464" y1="235" y2="226"></line>
+        </g>
+      </svg>
+
+      <!-- Expression Status Caption Overlay on Robot Face -->
+      <div class="mt-2 text-center" id="expression-caption">
+        <span class="font-mono text-xs uppercase tracking-[0.25em] text-[#00ff9d] bg-[#00ff9d]/10 border border-[#00ff9d]/30 px-3 py-1 rounded-full shadow-[0_0_12px_rgba(0,255,157,0.15)]">
+          EXPRESSION: NEUTRAL_IDLE
+        </span>
+      </div>
+    </div>
+
+    <!-- MINI VIDEO PLAYER / PiP (Bottom-Left Corner of Screen) -->
+    <div class="absolute bottom-3 left-6 z-20 w-60 sm:w-64 rounded-lg bg-[#0b0f17]/90 backdrop-blur-md border border-[#00ff9d]/40 shadow-[0_4px_24px_rgba(0,0,0,0.7),0_0_15px_rgba(0,255,157,0.2)] overflow-hidden transition-transform duration-200 hover:scale-105" id="pip-camera-container">
+      <!-- Corner Neon Reticles -->
+      <div class="pointer-events-none absolute w-3 h-3 pip-reticle-tl z-20"></div>
+      <div class="pointer-events-none absolute w-3 h-3 pip-reticle-tr z-20"></div>
+      <div class="pointer-events-none absolute w-3 h-3 pip-reticle-bl z-20"></div>
+      <div class="pointer-events-none absolute w-3 h-3 pip-reticle-br z-20"></div>
+
+      <!-- Mini PiP Header Bar -->
+      <div class="flex items-center justify-between px-2.5 py-1 bg-[#101722]/90 border-b border-[#00ff9d]/20 font-mono text-[10px]">
+        <div class="flex items-center gap-1.5 text-[#00ff9d] font-bold tracking-wider">
+          <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
+          <span>CAM 01 // FRONT FEED</span>
+        </div>
+        <span class="text-[9px] px-1.5 py-0.2 rounded bg-red-950/60 border border-red-500/40 text-red-300 font-bold tracking-tight" id="pip-fps-badge">LIVE 30FPS</span>
+      </div>
+
+      <!-- Video Screen Frame (Real Live Stream from BBAI-64 C++ Server) -->
+      <div class="relative aspect-video w-full overflow-hidden bg-black/90 group">
+        <img id="pip-stream"
+             alt="Live Robot Webcam Feed"
+             class="w-full h-full object-cover brightness-95 contrast-105"
+             src="/video_feed"
+             onerror="this.src='/static/img/fallback_feed.jpg';"/>
+        
+        <!-- Live HUD Overlay on Mini Video -->
+        <div class="absolute inset-0 pointer-events-none flex flex-col justify-between p-1.5 font-mono text-[8px] text-[#00ff9d]/90">
+          <div class="flex justify-between items-start">
+            <span class="bg-black/60 px-1 rounded text-[8px] text-cyan-300 border border-cyan-500/30">FOV: 120°</span>
+            <span class="bg-black/60 px-1 rounded text-[8px] text-slate-300" id="pip-node-label">/dev/video2</span>
+          </div>
+
+          <!-- Subtle Mini Center Crosshair -->
+          <div class="absolute inset-0 flex items-center justify-center opacity-40">
+            <div class="w-5 h-5 border border-[#00ff9d] rounded-full flex items-center justify-center">
+              <div class="w-1 h-1 bg-[#00ff9d] rounded-full"></div>
+            </div>
+          </div>
+
+          <div class="flex justify-between items-end bg-gradient-to-t from-black/80 via-transparent to-transparent pt-2 px-0.5">
+            <span class="text-[8px] text-emerald-400 font-bold" id="pip-tcs-indicator">TCS: ACTIVE</span>
+            <span class="text-[8px] text-slate-300" id="pip-res-label">640x480</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- BOTTOM CONTROL & INTERACTION DOCK (Touch / Onboard Interaction) -->
+  <footer class="relative z-10 w-full px-6 py-2.5 border-t border-white/[0.08] bg-[#0b0e14]/85 backdrop-blur-md flex items-center justify-between">
+    <!-- Directional Trigger Buttons (Emulates teleop for local testing) -->
+    <div class="flex items-center gap-4">
+      <div class="hidden sm:flex flex-col">
+        <span class="text-[9px] font-mono text-slate-400 tracking-wider font-semibold">MOTION TRIGGERS:</span>
+        <span class="text-[10px] text-slate-500 font-mono">WASD / Arrow Keys</span>
+      </div>
+      
+      <div class="flex items-center gap-1.5">
+        <!-- Forward (Squint) -->
+        <button class="btn-action flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#141a24] hover:bg-[#1a2332] active:bg-[#00ff9d]/20 border border-slate-700 hover:border-[#00ff9d]/50 text-slate-200 hover:text-[#00ff9d] font-mono text-xs transition" id="btn-fwd" onclick="triggerManualMotion('forward', 120, 120)">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
+          <span>FWD</span>
+        </button>
+
+        <!-- Left (Look Left) -->
+        <button class="btn-action flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#141a24] hover:bg-[#1a2332] active:bg-[#00ff9d]/20 border border-slate-700 hover:border-[#00ff9d]/50 text-slate-200 hover:text-[#00ff9d] font-mono text-xs transition" id="btn-left" onclick="triggerManualMotion('left', -80, 80)">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg>
+          <span>LEFT</span>
+        </button>
+
+        <!-- Right (Look Right) -->
+        <button class="btn-action flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#141a24] hover:bg-[#1a2332] active:bg-[#00ff9d]/20 border border-slate-700 hover:border-[#00ff9d]/50 text-slate-200 hover:text-[#00ff9d] font-mono text-xs transition" id="btn-right" onclick="triggerManualMotion('right', 80, -80)">
+          <span>RIGHT</span>
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"></path></svg>
+        </button>
+
+        <!-- Reverse (Look Back) -->
+        <button class="btn-action flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#141a24] hover:bg-[#1a2332] active:bg-[#00ff9d]/20 border border-slate-700 hover:border-[#00ff9d]/50 text-slate-200 hover:text-[#00ff9d] font-mono text-xs transition" id="btn-rev" onclick="triggerManualMotion('backward', -100, -100)">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7"></path></svg>
+          <span>REV</span>
+        </button>
+
+        <!-- Neutral / Stop -->
+        <button class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/50 active:bg-red-800/60 border border-red-500/40 text-red-300 font-mono text-xs transition" id="btn-stop" onclick="triggerManualMotion('idle', 0, 0)">
+          <span class="w-2 h-2 rounded-xs bg-red-400"></span>
+          <span>STOP</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Onboard Screen Mode & Happy Purr Mode -->
+    <div class="flex items-center gap-3 font-mono text-xs">
+      <div class="flex items-center gap-1.5 text-slate-400 text-[11px]">
+        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+        <span>AUTO-BLINK: ACTIVE</span>
+      </div>
+      <div class="h-3.5 w-px bg-slate-700"></div>
+      <button class="px-3 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-95 text-[#00ff9d] border border-emerald-500/30 transition text-xs font-semibold" onclick="triggerPurrMode()">
+        😸 PURR MODE
+      </button>
+    </div>
+  </footer>
+
+  <!-- ROBOT EXPRESSION & LIVE TELEMETRY SYNCHRONIZATION JAVASCRIPT -->
+  <script>
+    const avatar = document.getElementById('cat-avatar');
+    const vectorBadge = document.getElementById('vector-badge');
+    const vectorArrow = document.getElementById('vector-arrow');
+    const vectorLabel = document.getElementById('vector-label');
+    const expressionCaption = document.getElementById('expression-caption');
+    const leftEyeGroup = document.getElementById('eye-left-group');
+    const rightEyeGroup = document.getElementById('eye-right-group');
+    const pingReadout = document.getElementById('ping-readout');
+    const serialDot = document.getElementById('serial-dot');
+    const serialText = document.getElementById('serial-text');
+    const pipResLabel = document.getElementById('pip-res-label');
+    const pipTcsIndicator = document.getElementById('pip-tcs-indicator');
+
+    let currentState = 'idle';
+    let blinkTimeout = null;
+    let lastUserTriggerTime = 0;
+
+    // Apply movement reaction state and animations
+    function setMovementState(state, info = '') {
+      if (currentState === state && !info) return;
+      currentState = state;
+
+      // Reset animation state classes
+      avatar.classList.remove('state-left', 'state-right', 'state-forward', 'state-backward', 'state-alert');
+
+      // Reset button highlights
+      document.querySelectorAll('.btn-action').forEach(b => {
+        b.classList.remove('border-[#00ff9d]', 'text-[#00ff9d]', 'bg-[#00ff9d]/15');
+      });
+
+      if (state === 'left') {
+        avatar.classList.add('state-left');
+        vectorArrow.innerHTML = '←';
+        vectorLabel.innerText = info || 'TURNING LEFT';
+        vectorBadge.className = 'flex items-center gap-2 font-mono text-xs font-bold text-[#00ff9d]';
+        expressionCaption.innerHTML = '<span class="font-mono text-xs uppercase tracking-[0.25em] text-[#00ff9d] bg-[#00ff9d]/10 border border-[#00ff9d]/30 px-3 py-1 rounded-full shadow-[0_0_12px_rgba(0,255,157,0.2)]">EXPRESSION: LOOKING_LEFT ◄</span>';
+        const b = document.getElementById('btn-left');
+        if (b) b.classList.add('border-[#00ff9d]', 'text-[#00ff9d]', 'bg-[#00ff9d]/15');
+      } else if (state === 'right') {
+        avatar.classList.add('state-right');
+        vectorArrow.innerHTML = '→';
+        vectorLabel.innerText = info || 'TURNING RIGHT';
+        vectorBadge.className = 'flex items-center gap-2 font-mono text-xs font-bold text-[#00ff9d]';
+        expressionCaption.innerHTML = '<span class="font-mono text-xs uppercase tracking-[0.25em] text-[#00ff9d] bg-[#00ff9d]/10 border border-[#00ff9d]/30 px-3 py-1 rounded-full shadow-[0_0_12px_rgba(0,255,157,0.2)]">EXPRESSION: LOOKING_RIGHT ►</span>';
+        const b = document.getElementById('btn-right');
+        if (b) b.classList.add('border-[#00ff9d]', 'text-[#00ff9d]', 'bg-[#00ff9d]/15');
+      } else if (state === 'forward') {
+        avatar.classList.add('state-forward');
+        vectorArrow.innerHTML = '↑';
+        vectorLabel.innerText = info || 'FORWARD SPRINT';
+        vectorBadge.className = 'flex items-center gap-2 font-mono text-xs font-bold text-[#00e5ff]';
+        expressionCaption.innerHTML = '<span class="font-mono text-xs uppercase tracking-[0.25em] text-[#00e5ff] bg-[#00e5ff]/10 border border-[#00e5ff]/30 px-3 py-1 rounded-full shadow-[0_0_15px_rgba(0,229,255,0.25)]">EXPRESSION: SQUINT / DETERMINED FOCUS ▲</span>';
+        const b = document.getElementById('btn-fwd');
+        if (b) b.classList.add('border-[#00ff9d]', 'text-[#00ff9d]', 'bg-[#00ff9d]/15');
+      } else if (state === 'backward') {
+        avatar.classList.add('state-backward');
+        vectorArrow.innerHTML = '↓';
+        vectorLabel.innerText = info || 'REVERSE MOTION';
+        vectorBadge.className = 'flex items-center gap-2 font-mono text-xs font-bold text-amber-400';
+        expressionCaption.innerHTML = '<span class="font-mono text-xs uppercase tracking-[0.25em] text-amber-400 bg-amber-500/10 border border-amber-500/30 px-3 py-1 rounded-full shadow-[0_0_15px_rgba(255,179,0,0.25)]">EXPRESSION: LOOK BACK / CAUTIOUS GLANCE ▼</span>';
+        const b = document.getElementById('btn-rev');
+        if (b) b.classList.add('border-[#00ff9d]', 'text-[#00ff9d]', 'bg-[#00ff9d]/15');
+      } else if (state === 'alert') {
+        avatar.classList.add('state-alert');
+        vectorArrow.innerHTML = '⚡';
+        vectorLabel.innerText = info || 'TCS INTERVENTION';
+        vectorBadge.className = 'flex items-center gap-2 font-mono text-xs font-bold text-amber-400 animate-pulse';
+        expressionCaption.innerHTML = '<span class="font-mono text-xs uppercase tracking-[0.25em] text-amber-400 bg-amber-500/15 border border-amber-500/40 px-3 py-1 rounded-full shadow-[0_0_15px_rgba(255,179,0,0.4)]">EXPRESSION: TCS SLIP INTERVENTION ⚡</span>';
+      } else {
+        vectorArrow.innerHTML = '●';
+        vectorLabel.innerText = 'IDLE (AWAITING INPUT)';
+        vectorBadge.className = 'flex items-center gap-2 font-mono text-xs font-bold text-slate-400';
+        expressionCaption.innerHTML = '<span class="font-mono text-xs uppercase tracking-[0.25em] text-[#00ff9d] bg-[#00ff9d]/10 border border-[#00ff9d]/30 px-3 py-1 rounded-full shadow-[0_0_12px_rgba(0,255,157,0.15)]">EXPRESSION: NEUTRAL_IDLE</span>';
+      }
+    }
+
+    // Natural Organic Blinking Mechanism
+    function triggerBlink() {
+      if (currentState !== 'forward' && currentState !== 'alert') {
+        leftEyeGroup.classList.add('eye-blink');
+        rightEyeGroup.classList.add('eye-blink');
+
+        setTimeout(() => {
+          leftEyeGroup.classList.remove('eye-blink');
+          rightEyeGroup.classList.remove('eye-blink');
+        }, 160);
+      }
+
+      // Schedule next random blink between 2.5s and 5.5s
+      const nextBlink = Math.random() * 3000 + 2500;
+      clearTimeout(blinkTimeout);
+      blinkTimeout = setTimeout(triggerBlink, nextBlink);
+    }
+    blinkTimeout = setTimeout(triggerBlink, 2800);
+
+    // Manual Motion Trigger (dispatches to C++ REST motor API)
+    async function triggerManualMotion(action, leftPwm, rightPwm) {
+      lastUserTriggerTime = performance.now();
+      setMovementState(action);
+
+      try {
+        if (action === 'idle') {
+          await fetch('/api/stop', { method: 'POST' });
+        } else {
+          await fetch('/api/teleop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'analog', left_pwm: leftPwm, right_pwm: rightPwm })
+          });
+        }
+      } catch (err) {
+        console.warn('Teleop dispatch error:', err);
+      }
+    }
+
+    // Happy Purr Special Mode
+    function triggerPurrMode() {
+      lastUserTriggerTime = performance.now() + 2500;
+      setMovementState('forward');
+      expressionCaption.innerHTML = '<span class="font-mono text-xs uppercase tracking-[0.25em] text-[#00ff9d] bg-[#00ff9d]/20 border border-[#00ff9d]/50 px-3 py-1 rounded-full animate-bounce">😸 ROBOT PURRING: MAXIMUM HAPPINESS</span>';
+      setTimeout(() => {
+        setMovementState('idle');
+      }, 2600);
+    }
+
+    // -------------------------------------------------------------------------
+    // REAL-TIME HARDWARE & TELEMETRY SYNCHRONIZATION POLLER (80ms)
+    // -------------------------------------------------------------------------
+    async function pollLiveTelemetry() {
+      try {
+        const t0 = performance.now();
+        const resp = await fetch('/api/status');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const latency = Math.round(performance.now() - t0);
+
+        if (pingReadout) pingReadout.textContent = `${latency} ms`;
+
+        // Serial connection status
+        if (data.serial_connected) {
+          serialDot.className = 'w-1.5 h-1.5 rounded-full bg-[#00ff9d] animate-ping';
+          serialText.textContent = 'SERIAL: CONNECTED (/dev/ttyUSB0)';
+        } else {
+          serialDot.className = 'w-1.5 h-1.5 rounded-full bg-yellow-400';
+          serialText.textContent = 'SERIAL: CONNECTING...';
+        }
+
+        // Camera feed properties
+        if (data.usb_webcam && data.usb_webcam.width && data.usb_webcam.height) {
+          if (pipResLabel) pipResLabel.textContent = `${data.usb_webcam.width}x${data.usb_webcam.height}`;
+        }
+
+        // Evaluate robot movement from telemetry if user didn't manually press button in last 600ms
+        if (performance.now() - lastUserTriggerTime > 600 && data.telemetry) {
+          const tel = data.telemetry;
+          const lp = tel.left_pwm || 0;
+          const rp = tel.right_pwm || 0;
+          const cmd = tel.last_cmd || 'STOP';
+          const tcs = tel.tcs || {};
+
+          if (tcs.guard || (tcs.active && (tcs.slip_left || tcs.slip_right))) {
+            setMovementState('alert', 'TCS INTERVENTION (WHEEL SLIP)');
+            if (pipTcsIndicator) pipTcsIndicator.textContent = 'TCS: ENGAGED';
+          } else if (cmd === 'FORWARD' || (lp > 15 && rp > 15)) {
+            setMovementState('forward', `FORWARD (L:${lp} R:${rp})`);
+            if (pipTcsIndicator) pipTcsIndicator.textContent = 'TCS: STABLE';
+          } else if (cmd === 'BACKWARD' || (lp < -15 && rp < -15)) {
+            setMovementState('backward', `REVERSE (L:${lp} R:${rp})`);
+            if (pipTcsIndicator) pipTcsIndicator.textContent = 'TCS: STABLE';
+          } else if (cmd === 'LEFT' || (lp < rp - 25)) {
+            setMovementState('left', `TURNING LEFT (L:${lp} R:${rp})`);
+            if (pipTcsIndicator) pipTcsIndicator.textContent = 'TCS: STABLE';
+          } else if (cmd === 'RIGHT' || (rp < lp - 25)) {
+            setMovementState('right', `TURNING RIGHT (L:${lp} R:${rp})`);
+            if (pipTcsIndicator) pipTcsIndicator.textContent = 'TCS: STABLE';
+          } else {
+            setMovementState('idle');
+            if (pipTcsIndicator) pipTcsIndicator.textContent = 'TCS: STABLE';
+          }
+        }
+      } catch (err) {
+        // Ignore network drops
+      }
+    }
+
+    const hostIpEl = document.getElementById('host-ip');
+    if (hostIpEl && window.location.hostname) {
+      hostIpEl.textContent = window.location.hostname;
+    }
+
+    // Start 80ms live telemetry poller
+    setInterval(pollLiveTelemetry, 85);
+    pollLiveTelemetry();
+
+    // Physical Keyboard Support for Local Testing on BBAI-64
+    window.addEventListener('keydown', (e) => {
+      const key = e.key.toLowerCase();
+      if (key === 'a' || key === 'arrowleft') {
+        triggerManualMotion('left', -80, 80);
+      } else if (key === 'd' || key === 'arrowright') {
+        triggerManualMotion('right', 80, -80);
+      } else if (key === 'w' || key === 'arrowup') {
+        triggerManualMotion('forward', 120, 120);
+      } else if (key === 's' || key === 'arrowdown') {
+        triggerManualMotion('backward', -100, -100);
+      } else if (key === ' ' || key === 'escape') {
+        triggerManualMotion('idle', 0, 0);
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      const key = e.key.toLowerCase();
+      if (['a', 'arrowleft', 'd', 'arrowright', 'w', 'arrowup', 's', 'arrowdown'].includes(key)) {
+        setTimeout(() => { triggerManualMotion('idle', 0, 0); }, 300);
+      }
+    });
+  </script>
+</body>
+</html>

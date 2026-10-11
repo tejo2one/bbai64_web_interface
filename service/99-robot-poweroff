@@ -1,0 +1,2 @@
+# Allow debian user to trigger systemctl poweroff from web interface without password prompt
+debian ALL=(ALL) NOPASSWD: /bin/systemctl poweroff, /bin/systemctl halt, /bin/systemctl reboot
